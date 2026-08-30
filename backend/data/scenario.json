@@ -1,0 +1,136 @@
+{
+  "seed": 42,
+  "window_start": "2026-05-01T00:00:00",
+  "window_end": "2026-05-31T00:00:00",
+  "counts": {
+    "accounts": 255,
+    "transactions": 1158,
+    "device_sessions": 1550,
+    "beneficiaries": 619
+  },
+  "calibration_reference": "IBM Transactions for Anti Money Laundering (AML), HI-Small variant; Altman et al., NeurIPS 2023 Datasets and Benchmarks",
+  "structures": [
+    {
+      "key": "loud_ring",
+      "label": "Scam-to-mule ring",
+      "primary_account": "ACC-R001",
+      "account_ids": [
+        "ACC-V001",
+        "ACC-M001",
+        "ACC-M002",
+        "ACC-M003",
+        "ACC-R001",
+        "ACC-R002",
+        "ACC-R003",
+        "ACC-R004",
+        "ACC-R005",
+        "ACC-R006",
+        "ACC-R007",
+        "ACC-R008",
+        "ACC-R009",
+        "ACC-R010",
+        "ACC-R011",
+        "ACC-F001",
+        "ACC-F002",
+        "ACC-F003",
+        "ACC-F004",
+        "ACC-F005",
+        "ACC-F006",
+        "ACC-P001",
+        "ACC-P002",
+        "ACC-E001",
+        "ACC-E002",
+        "ACC-B001",
+        "ACC-W001"
+      ],
+      "expected_rules": [
+        "S3",
+        "S1",
+        "M1",
+        "M2",
+        "G2",
+        "G1",
+        "G3"
+      ],
+      "narrative": "An elderly customer is talked into transferring funds to a newly added payee. The receiving account pushes 87% of its balance out within a day, having collected from six unrelated senders that week, and shares a device fingerprint with two more mules. The funds land in an eleven-account cluster moving on identical timing -- the ring."
+    },
+    {
+      "key": "ato",
+      "label": "Account takeover",
+      "primary_account": "ACC-T001",
+      "account_ids": [
+        "ACC-T001",
+        "ACC-T002"
+      ],
+      "expected_rules": [
+        "A2",
+        "A1",
+        "S2"
+      ],
+      "narrative": "Five failed logins, then a success from an unfamiliar device and IP, a password reset fifteen minutes later, and a transfer worth 24x this customer's usual within the hour."
+    },
+    {
+      "key": "stealth_ring",
+      "label": "Stealth mule network",
+      "primary_account": "ACC-X001",
+      "account_ids": [
+        "ACC-X001",
+        "ACC-X002",
+        "ACC-X003",
+        "ACC-X004",
+        "ACC-X005",
+        "ACC-X006",
+        "ACC-X007",
+        "ACC-X008"
+      ],
+      "expected_rules": [],
+      "narrative": "Eight accounts moving money in a closed loop, every parameter tuned to sit just under a reporting threshold. No rule fires. The anomaly model flags all eight on the shape of their behaviour -- a pass-through ratio that never varies, a forwarding delay clustered inside six hours, and counterparties that are all new -- and the graph layer shows they are connected."
+    }
+  ],
+  "stealth_evasions": [
+    {
+      "rule": "M1",
+      "margin": "forwards 68-74% of each credit, and only after 26-33h (needs >80% of balance within 24h)"
+    },
+    {
+      "rule": "M2",
+      "margin": "two unique external senders per account, amounts spread far wider than +/-20% (needs >5, clustered)"
+    },
+    {
+      "rule": "M3",
+      "margin": "an 8-account loop, longer than the 6-hop cycle search, so no circuit closes (needs a return within 72h)"
+    },
+    {
+      "rule": "S1",
+      "margin": "no transfer exceeds 2.6x the account's own average (needs >5x)"
+    },
+    {
+      "rule": "S2",
+      "margin": "one consistent device and IP per account throughout (needs a device/location change)"
+    },
+    {
+      "rule": "S3",
+      "margin": "all members are in the 26-40 age band (needs an elderly/vulnerable profile)"
+    },
+    {
+      "rule": "A1",
+      "margin": "no password resets, no new-device logins (needs both plus a transfer)"
+    },
+    {
+      "rule": "A2",
+      "margin": "no failed logins at all (needs 5 then a success elsewhere)"
+    },
+    {
+      "rule": "G1",
+      "margin": "at least 4 hops from the watchlist account (needs within 2)"
+    },
+    {
+      "rule": "G2",
+      "margin": "unique device fingerprint, phone and address per account (needs a shared identifier)"
+    },
+    {
+      "rule": "G3",
+      "margin": "8 accounts (needs a cluster of >10)"
+    }
+  ]
+}
