@@ -1,0 +1,11 @@
+# Pinned to what the demo was built and tested against. All open source,
+# which the hackathon grades on (CLAUDE.md section 8).
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+networkx==3.6.1          # ships Louvain natively; no python-louvain needed
+scikit-learn==1.9.0
+numpy==2.4.6
+Faker==40.37.0
+httpx==0.28.1
+pytest==9.1.1
