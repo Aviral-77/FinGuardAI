@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FinGuard AI — API console</title>
+    <style>
+      :root {
+        --ink: #0b2545;
+        --muted: #5b6780;
+        --line: #dce3ee;
+        --bg: #f8fafc;
+        --panel: #fff;
+        --teal: #17a398;
+        --gold: #d9a441;
+        --alert: #c1121f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      header {
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      header b { font-size: 17px; }
+      header .teal { color: var(--teal); }
+      header .base {
+        margin-left: auto;
+        font: 12px ui-monospace, monospace;
+        color: var(--muted);
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      header input {
+        font: 12px ui-monospace, monospace;
+        padding: 4px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        width: 210px;
+      }
+      main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        padding: 20px;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 16px;
+      }
+      .card h2 {
+        margin: 0 0 12px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        font-size: 11px;
+        color: var(--muted);
+        flex: 1;
+        min-width: 90px;
+      }
+      input[type="text"], input[type="number"], select {
+        font: 13px system-ui, sans-serif;
+        padding: 7px 9px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        width: 100%;
+      }
+      button {
+        font: 600 13px system-ui, sans-serif;
+        padding: 8px 14px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--panel);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      button:hover { background: #f3f6fb; }
+      button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+      button.gold { border-color: var(--gold); color: #8a6d1f; }
+      button.alert { border-color: var(--alert); color: var(--alert); }
+      button.teal { border-color: var(--teal); color: var(--teal); }
+      .beats { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .hint { font-size: 11.5px; color: var(--muted); margin: 8px 0 0; }
+      #log {
+        grid-column: 1 / -1;
+        background: #0b2545;
+        color: #d7e2f4;
+        border-radius: 10px;
+        padding: 14px 16px;
+        font: 12px/1.5 ui-monospace, monospace;
+        max-height: 320px;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+      #log .ok { color: #7fe0c8; }
+      #log .err { color: #ff9ba3; }
+      #log .call { color: var(--gold); }
+      .full { flex: 1 1 100%; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <b>FinGuard <span class="teal">AI</span></b>
+      <span style="color: var(--muted)">API console</span>
+      <span class="base">
+        base
+        <input id="base" placeholder="(same origin)" />
+      </span>
+    </header>
+
+    <main>
+      <!-- Demo beats -->
+      <section class="card">
+        <h2>Demo beats — the scripted scam</h2>
+        <div class="beats">
+          <button onclick="reset()">0 · Reset</button>
+          <button class="gold" onclick="beat(1)">1 · Victim transfer</button>
+          <button class="alert" onclick="beat(2)">2 · Fan-out</button>
+          <button class="teal" onclick="blocked()">3 · Blocked attempt</button>
+          <label style="flex: 0; min-width: 90px">
+            stagger ms
+            <input type="number" id="stagger" value="450" />
+          </label>
+        </div>
+        <p class="hint">
+          Fire in order. Reset first, always. Beat 3 needs a freeze first
+          (freeze <code>ACC-M001</code> below).
+        </p>
+      </section>
+
+      <!-- Account actions -->
+      <section class="card">
+        <h2>Account actions</h2>
+        <div class="row">
+          <label class="full">
+            account id
+            <input type="text" id="acct" value="ACC-R001" />
+          </label>
+        </div>
+        <div class="row" style="margin-top: 10px">
+          <button onclick="getAccount()">Get case</button>
+          <button class="alert" onclick="freeze()">Freeze</button>
+          <button onclick="report()">Report</button>
+          <button class="primary" onclick="openPdf()">Open PDF</button>
+        </div>
+        <p class="hint">
+          Ring hub is <code>ACC-R001</code>; Account A / primary mule is
+          <code>ACC-M001</code>; victim is <code>ACC-V001</code>.
+        </p>
+      </section>
+
+      <!-- Single transaction -->
+      <section class="card" style="grid-column: 1 / -1">
+        <h2>Send a transaction</h2>
+        <div class="row">
+          <label>from<input type="text" id="from" value="ACC-V001" /></label>
+          <label>to<input type="text" id="to" value="ACC-M001" /></label>
+          <label>amount<input type="number" id="amount" value="275000" /></label>
+          <label>
+            channel
+            <select id="channel">
+              <option>IMPS</option>
+              <option>Wire</option>
+              <option>ACH</option>
+              <option>Cheque</option>
+              <option>Cash</option>
+            </select>
+          </label>
+          <label>device_id (optional)<input type="text" id="device" placeholder="e.g. dev_shared_01" /></label>
+          <button class="primary" onclick="sendTxn()">Send</button>
+        </div>
+        <p class="hint">
+          A first-ever payment to a new <code>to</code> registers a new payee
+          (S1/S3). Reuse one <code>device_id</code> across 3+ accounts to trip
+          G2. Leave timestamp out — it auto-assigns. A frozen account returns
+          409.
+        </p>
+      </section>
+
+      <pre id="log">Ready. Point "base" at your backend if this page isn't served by it (e.g. http://127.0.0.1:8000).\n</pre>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const base = () => $("base").value.trim().replace(/\/$/, "");
+      const url = (path) => base() + path;
+
+      function log(kind, msg) {
+        const el = $("log");
+        const cls = kind === "ok" ? "ok" : kind === "err" ? "err" : "call";
+        el.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+        el.scrollTop = el.scrollHeight;
+      }
+
+      async function call(method, path, body) {
+        const opts = { method, headers: {} };
+        if (body !== undefined) {
+          opts.headers["Content-Type"] = "application/json";
+          opts.body = JSON.stringify(body);
+        }
+        log("call", `→ ${method} ${path}${body ? " " + JSON.stringify(body) : ""}`);
+        try {
+          const r = await fetch(url(path), opts);
+          const text = await r.text();
+          let out = text;
+          try { out = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+          log(r.ok ? "ok" : "err", `← ${r.status}  ${out.slice(0, 1200)}`);
+          return { status: r.status, text };
+        } catch (e) {
+          log("err", `✗ ${e.message} (is the backend running? set the base URL)`);
+        }
+      }
+
+      const stagger = () => Number($("stagger").value || 0);
+      const reset = () => call("POST", "/api/demo/reset");
+      const beat = (n) => call("POST", `/api/demo/beat/${n}?stagger_ms=${stagger()}`);
+      const blocked = () => call("POST", "/api/demo/blocked-attempt");
+
+      const acct = () => $("acct").value.trim();
+      const getAccount = () => call("GET", `/api/account/${acct()}`);
+      const freeze = () => call("POST", `/api/account/${acct()}/freeze`);
+      const report = () => call("POST", `/api/account/${acct()}/report`);
+      const openPdf = () => window.open(url(`/api/account/${acct()}/report.pdf`), "_blank");
+
+      function sendTxn() {
+        const body = {
+          from_account: $("from").value.trim(),
+          to_account: $("to").value.trim(),
+          amount: Number($("amount").value),
+          channel: $("channel").value,
+        };
+        const dev = $("device").value.trim();
+        if (dev) body.device_id = dev;
+        call("POST", "/api/transaction", body);
+      }
+    </script>
+  </body>
+</html>
