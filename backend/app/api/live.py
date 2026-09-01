@@ -97,11 +97,27 @@ class BatchIn(BaseModel):
 # --------------------------------------------------------------------------
 
 
-async def _apply(txn: TransactionIn) -> dict[str, Any]:
-    """Inject one transaction, broadcast, return the API payload."""
+def _parse_timestamp(raw: str | None) -> "dt.datetime | None":
+    """Parse an ISO timestamp, tolerating omitted or placeholder values.
+
+    The DEMO-SPEC documents timestamp as "auto if omitted", and Swagger's
+    /docs sends the literal example "string" -- neither is a real timestamp, so
+    an unparseable value is treated as omitted (auto-assigned) rather than
+    raising a 500.
+    """
     import datetime as dt
 
-    when = dt.datetime.fromisoformat(txn.timestamp) if txn.timestamp else None
+    if not raw:
+        return None
+    try:
+        return dt.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+async def _apply(txn: TransactionIn) -> dict[str, Any]:
+    """Inject one transaction, broadcast, return the API payload."""
+    when = _parse_timestamp(txn.timestamp)
     result = LIVE.inject(
         from_account=txn.from_account,
         to_account=txn.to_account,
