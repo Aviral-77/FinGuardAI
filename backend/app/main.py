@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from .analysis import cached_analysis
 from .api.live import router as live_router
@@ -75,10 +77,25 @@ app.include_router(api_router)  # batch/replay analysis (additive)
 app.include_router(ws_router)  # /ws/replay
 
 
+_CONSOLE_HTML = (Path(__file__).resolve().parent / "console.html").read_text(encoding="utf-8")
+
+
+@app.get("/console", response_class=HTMLResponse)
+def console() -> str:
+    """A dead-simple point-and-click console for the API.
+
+    Served same-origin so it needs no CORS setup: open http://<host>:8000/console
+    and drive the whole demo (beats, transactions, freeze, PDF) without typing
+    JSON into Swagger.
+    """
+    return _CONSOLE_HTML
+
+
 @app.get("/")
 def root() -> dict[str, str]:
     return {
         "service": "FinGuard AI",
+        "console": "/console",
         "docs": "/docs",
         "health": "/api/health",
         "live_ws": "/ws/live",
