@@ -65,7 +65,12 @@ class M1RapidFundMovement(Rule):
                     cumulative += txn.amount
                     evidence.append(txn.txn_id)
                     if cumulative >= target:
-                        share = cumulative / event.balance_after
+                        # Cap at 100%: an account cannot move more than its
+                        # balance, and per-credit attribution can otherwise show
+                        # a ring member forwarding "101%" when it also received
+                        # from elsewhere. The rule is "over 80%"; the exact
+                        # figure past 100% is an artifact, not evidence.
+                        share = min(cumulative / event.balance_after, 1.0)
                         hits.append(
                             self.hit(
                                 account_id,

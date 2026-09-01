@@ -14,9 +14,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .analysis import cached_analysis
+from .api.live import router as live_router
+from .api.live import ws_router as live_ws_router
 from .api.routes import router as api_router
 from .api.ws import router as ws_router
 from .config import CORS_ORIGINS
+from .live.state import LIVE
 
 logger = logging.getLogger("finguard")
 
@@ -40,16 +43,21 @@ async def lifespan(app: FastAPI):
         len(analysis.networks),
         len(analysis.missed_networks),
     )
+    # Warm the live demo state too, so the first trigger on stage is instant.
+    LIVE.reset()
+    logger.info("live demo state ready at Beat 0")
     yield
 
 
 app = FastAPI(
     title="FinGuard AI",
     description=(
-        "Fraud detection console for retail banking. Graph layer, deterministic "
-        "rule engine, anomaly model and investigator copilot."
+        "Fraud detection console for retail banking. A deterministic graph + "
+        "rule engine with a template-composed investigator copilot, driven live "
+        "over an API. An optional anomaly layer and LLM narrative sit behind "
+        "config flags."
     ),
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -61,8 +69,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(api_router)
-app.include_router(ws_router)
+app.include_router(live_router)  # the DEMO-SPEC live API
+app.include_router(live_ws_router)  # /ws/live
+app.include_router(api_router)  # batch/replay analysis (additive)
+app.include_router(ws_router)  # /ws/replay
 
 
 @app.get("/")
@@ -71,5 +81,6 @@ def root() -> dict[str, str]:
         "service": "FinGuard AI",
         "docs": "/docs",
         "health": "/api/health",
-        "replay": "/ws/replay",
+        "live_ws": "/ws/live",
+        "replay_ws": "/ws/replay",
     }

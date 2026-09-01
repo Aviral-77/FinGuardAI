@@ -25,16 +25,19 @@ There are two failures, and the product has one half for each:
 
 ## 3. What we are building
 
-Four components. **Only two are AI, and that is deliberate.**
+Three components. **The detection is entirely deterministic — that is the point, not a shortcut.**
 
-| Stage | Component | AI? | Job |
-|---|---|---|---|
-| SEE | Graph layer | No | Live account-to-account graph; rings appear as shapes |
-| SCORE | Rule engine | No | 10 fraud rules score every account in real time |
-| CATCH | Anomaly model | **Yes (ML)** | Isolation Forest flags what no written rule covers |
-| ACT | Investigator copilot | **Yes (LLM)** | Writes the case file and recommends one named action |
+| Stage | Component | Job |
+|---|---|---|
+| SEE | Graph layer | Live account-to-account graph; rings appear as shapes |
+| SCORE | Rule engine | 10 fraud rules score every account in real time |
+| ACT | Investigator copilot | Composes the case file and recommends one named action |
 
-**Non-negotiable design rule:** the LLM never computes a score or chooses an action. Rules compute, thresholds decide, AI explains. Every point in a score must trace back to a named rule. This is what makes the output auditable, and it is our core differentiator — do not "improve" this by letting the model decide things.
+**Non-negotiable design rule:** the score and the action are always computed by rules and thresholds, never inferred. Every point in a score must trace back to a named rule. This is what makes the output auditable, and it is our core differentiator — do not "improve" this by adding a model that decides things.
+
+The copilot's case narrative is **generated from templates** filled with real case values, not from a model. It renders instantly, cannot fail live, and reads identically on screen. See `DEMO-SPEC.md` for the composer design.
+
+No ML model in the demo. An unsupervised anomaly layer adds nothing visible on screen and is not worth the build time.
 
 ## 4. The rules (implement all ten)
 
@@ -121,23 +124,24 @@ A working visual mockup exists (`finguard-fraud-room.html`) — scripted HTML wi
 
 All open source — the hackathon grades on this.
 
-- **Backend:** Python, FastAPI. Replays the pre-generated transaction file through the rule engine, streams score updates over WebSocket.
+- **Backend:** Python, FastAPI. Scores incoming transactions through the rule engine, streams updates over WebSocket.
 - **Graph:** NetworkX (2-hop traversal for G1, Louvain community detection + centrality for G3). Neo4j only if there is spare time.
-- **ML:** scikit-learn Isolation Forest on transaction features (amount, velocity, hour-of-day, counterparty novelty). Trains in seconds. Surface it as a separate anomaly score column alongside the rule score.
-- **LLM:** Claude or GPT-4o-mini via API for case summaries. Input is structured facts (score breakdown, triggered rules, transaction summary, linked accounts); output is a plain-English narrative. Cache responses for the demo so it never fails live.
+- **Case narrative:** template composer — sentence fragments per rule, filled with real case values, ordered by points contributed. No model call.
+- **PDF:** ReportLab or WeasyPrint, generated server-side.
 - **Frontend:** React + react-force-graph (or Cytoscape.js).
 - **Data generation:** Faker.
 
 ## 9. Build order
 
+See `DEMO-SPEC.md` for the authoritative build order. In summary:
+
 1. Data generator producing all four tables with the ring pre-planted
 2. Rule engine — all 10 rules, unit-tested against hand-built fixtures
 3. Graph layer + the two graph rules (G1, G3)
-4. FastAPI replay service streaming over WebSocket
-5. React UI: feed + graph, ring forming live
-6. Copilot panel + LLM case summaries
-7. Rules-only toggle, Approve flow, second scenario
-8. Isolation Forest (last — it is the smallest slice of the story)
+4. FastAPI transaction endpoint streaming over WebSocket
+5. React UI: canvas + dashboard, nodes appearing and scoring live
+6. Template case-summary composer
+7. Freeze / report actions, PDF report, preset trigger scripts
 
 ## 10. Working principles
 

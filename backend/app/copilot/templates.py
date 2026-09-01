@@ -23,6 +23,7 @@ from ..engine.scoring import score_breakdown
 from ..graphlayer.traversal import within_hops
 from ..ml.explain import describe
 from ..models import MLNetwork
+from .composer import compose_narrative
 
 
 def build_case(analysis: Analysis, account_id: str) -> dict[str, Any]:
@@ -109,9 +110,10 @@ def _summary(analysis: Analysis, account_id: str) -> str:
 
     if score is None or not score.hits:
         base = (
-            f"{account_id} triggered no detection rule during the window. "
-            f"On the rule engine alone it would have been allowed through."
+            f"Account {account_id} triggered no detection rule. On the rule "
+            f"engine it would be allowed through with no action."
         )
+        # Only meaningful when the ML layer is enabled; the stage demo has it off.
         if finding is not None and (finding.is_anomalous or finding.is_elevated):
             networks = [
                 n for n in analysis.networks if account_id in n.account_ids and n.missed_by_rules
@@ -128,23 +130,17 @@ def _summary(analysis: Analysis, account_id: str) -> str:
                 )
         return base
 
-    first = score.hits[0]
-    last = score.hits[-1]
-    rules = ", ".join(score.rule_ids)
-    text = (
-        f"{account_id} scored {score.score} across {len(score.rule_ids)} rules "
-        f"({rules}) between {first.timestamp:%d %b %H:%M} and {last.timestamp:%d %b %H:%M}, "
-        f"placing it in the {score.band_label.lower()} band."
-    )
-    if account.is_elderly and "S3" in score.rule_ids:
-        text += (
-            " The customer is in the 60+ age band and the pattern is consistent "
-            "with a scam victim rather than a participant."
-        )
+    # The DEMO-SPEC narrative: clauses from the fired rules, ordered by points,
+    # with a victim-aware closing line. The victim of a scam must never read as
+    # a suspect (the brief is emphatic), so an elderly account whose signals are
+    # scam indicators gets the victim classification.
+    is_victim = account.is_elderly and set(score.rule_ids) <= {"S1", "S3", "S2"}
+    text = compose_narrative(account_id, score.hits, is_victim=is_victim)
+
     if finding is not None and finding.is_anomalous:
         text += (
-            f" The anomaly model independently ranks it {finding.rank} of "
-            f"{len(analysis.anomaly.findings)}."
+            f" (The anomaly model independently ranks it {finding.rank} of "
+            f"{len(analysis.anomaly.findings)}.)"
         )
     return text
 

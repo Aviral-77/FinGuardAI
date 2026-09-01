@@ -9,3 +9,11 @@ numpy==2.4.6
 Faker==40.37.0
 httpx==0.28.1
 pytest==9.1.1
+python-dotenv==1.1.1     # .env config loading
+reportlab==5.0.1         # server-side PDF case report
+
+# Optional: only needed when FINGUARD_LLM_PROVIDER selects a provider. The
+# copilot narrative defaults to the deterministic template composer, so these
+# are not required to run the demo.
+google-genai==2.20.0     # FINGUARD_LLM_PROVIDER=gemini
+# anthropic>=0.40         # FINGUARD_LLM_PROVIDER=anthropic

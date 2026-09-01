@@ -1,7 +1,7 @@
 # FinGuard AI
 
-A fraud detection console for retail banking, built to the brief in
-[`CLAUDE.md`](CLAUDE.md).
+A fraud detection console for retail banking, built to
+[`CLAUDE.md`](CLAUDE.md) and [`DEMO-SPEC.md`](DEMO-SPEC.md).
 
 Banks score transactions one at a time. Every hop in a mule ring is
 individually legitimate, so the ring never surfaces until the money is gone.
@@ -10,15 +10,16 @@ appears as a shape, and an **investigator copilot**, so an alert arrives as a
 case file with a named next step instead of an account id and a rule number.
 
 ```
-SEE      graph layer         no AI    live account-to-account graph
-SCORE    rule engine         no AI    11 fraud rules score every account
-CATCH    anomaly model       ML       Isolation Forest finds what no rule covers
-ACT      investigator copilot LLM     writes the case file, recommends one action
+SEE      graph layer          live account-to-account graph; rings appear as shapes
+SCORE    rule engine          11 fraud rules score every account
+ACT      investigator copilot composes the case file and recommends one named action
 ```
 
-**The non-negotiable:** the LLM never computes a score or chooses an action.
-Rules compute, thresholds decide, AI explains. Every point in every score traces
-back to a named rule, and a test asserts that arithmetic reconciles.
+**The non-negotiable:** the score and the action are always computed by rules
+and thresholds, never inferred. Every point in a score traces back to a named
+rule — a test asserts the arithmetic reconciles. The case narrative is composed
+from **templates** filled with the real case values, so it renders instantly and
+cannot fail live.
 
 ---
 
@@ -28,167 +29,127 @@ back to a named rule, and a test asserts that arithmetic reconciles.
 # backend
 cd backend
 pip install -r requirements.txt
-python -m app.generator.generate      # optional: the CSVs are committed
 uvicorn app.main:app --port 8000
 
 # frontend, in a second shell
 cd frontend
 npm install
-npm run dev                           # http://localhost:5173
+npm run dev            # http://localhost:5173
 ```
 
-Then press **Play**. The 30-day window replays in about 25 seconds at 1×.
-
-```bash
-cd backend && pytest -q               # 58 tests
-```
+Config is optional — everything falls back to a safe default. Copy
+`backend/.env.example` to `backend/.env` to change ports, CORS, or switch on an
+LLM. Run the tests with `cd backend && pytest -q` (73 tests).
 
 ---
 
-## The demo, in three acts
+## The demo — three beats, presenter-driven
 
-### Act 1 — the rules catch the ring
+The demo is **API-driven, not auto-playing**: nothing is flagged until a trigger
+is fired, so the story can be told in three beats with a pause for narration
+between each. Drive it from the on-screen control strip, the number keys
+`0/1/2/3`, or the `demo/*.sh` scripts.
 
-Rules fire in the order the brief specifies, and the score climbs visibly:
+### Beat 0 — a normal afternoon (`00-reset.sh`)
+Ambient traffic between grey nodes. Nothing flagged. `POST /api/demo/reset`
+returns to this state in one call, so the demo re-runs cleanly every time.
 
-| When | Rule | | Account | Score |
-|---|---|---|---|---|
-| 23 May 19:30 | **S3** Elderly / vulnerable pattern | +15 | victim | 15 |
-| 24 May 06:00 | **S1** New beneficiary, high value | +20 | victim | **35** → Enhanced monitoring |
-| 24 May 18:00 | **M1** Rapid fund movement | +25 | primary mule | 25 |
-| 25 May 09:00 | **M2** Multiple source accounts | +20 | primary mule | 45 |
-| 25 May 12:00 | **G2** Shared identifiers | +20 | primary mule | **65** → Step-up authentication |
-| 27 May 14:40 | **G3** Emerging ring | +35 | ring hub | **95** → Temporary block / freeze |
+### Beat 1 — the victim transfer (`01-victim-transfer.sh`)
+The victim's transfers land the account at **35 — Enhanced monitoring**, and the
+dashboard says *"Insufficient evidence for action. Watching for onward
+movement."* **The action controls stay disabled.** This is the most important
+beat: one unusual transfer is not fraud, and the system does not cry wolf.
 
-The victim settles at 35 — enhanced monitoring, because he is a victim, not a
-suspect. The ring hub sits at 60 until G3 lands, and **G3 is the rule that
-carries it across 86**. The ring being *seen* is what triggers the freeze, which
-is the entire argument for the graph layer. `tests/test_scenario.py` asserts
-exactly that, so the demo cannot drift.
+### Beat 2 — the fan-out (`02-fanout.sh`)
+The money splits. Scores climb, nodes go amber → red, and the ring assembles
+into a shape with a red boundary: **MULE RING DETECTED · 11 accounts · ₹X in
+motion**. The hub crosses **86 → Temporary block / freeze**. Now, and only now,
+the action controls unlock.
 
-### Act 2 — the rules-only toggle
+### Beat 3 — act (`03-freeze.sh`, `04-blocked-attempt.sh`)
+**Freeze** locks the ring and the header flips to **RING CONTAINED**. A further
+transfer into a frozen account is **rejected with HTTP 409** — the freeze is
+real, not cosmetic. **Download report** produces a bank-grade PDF case file
+(`05-download-report.sh`).
 
-One switch re-runs the engine without the network rules and without the model —
-a genuine second run, not a filter over the same result.
-
-|  | Full engine | Rules-only |
-|---|---|---|
-| Accounts frozen | **4** | **0** |
-| Highest score | 95 | 75 |
-| Rules available | 11 | 8 |
-| Alerts raised | 16 | 4 |
-
-The ring disappears. What a conventional per-transaction system sees in the same
-window is one isolated alert about an unrelated account takeover.
-
-### Act 3 — the model catches what no rule can
-
-An eight-account ring is planted that sits deliberately under **every** rule
-threshold: 68–74% forwarded rather than >80%, after 26–33 hours rather than
-within 24, two unique senders rather than more than five, eight members rather
-than more than ten, its own device and address per account, four hops from the
-watchlist. Every evasion margin is documented in
-`app/generator/typologies.py::STEALTH_EVASIONS`.
-
-No rule fires on it. Not "scores below threshold" — **no rule fires at all**, and
-all eight would have been allowed through.
-
-The anomaly model finds it anyway, and finds it as a *network*:
-
-```
-MLN-02: 10 connected accounts, internal density 36%
-  No rule escalated any of them -- the highest rule score in the cluster is 0.
-  A per-transaction system sees nothing here.
-  ACC-X001: regularity of that holding time is 5.9 standard deviations below
-  the population; consistency of the fraction forwarded each time, 3.9 below.
-```
-
-For contrast the model also clusters the loud ring, and correctly reports it as
-**already escalated** — so the demo can distinguish "the model found something
-new" from "the model found everything".
-
-Clicking **Approve** locks the accounts and the header flips to `RING FROZEN`.
+The rule firing order and the scores are pinned by `tests/test_live_demo.py`, so
+the demo cannot silently drift: victim 35 (not actionable), hub ≥ 86, ring of 11,
+freeze → 409, reset → clean.
 
 ---
 
-## How the ML layer stays honest
+## The rules (all eleven)
 
-Three design choices, because "our AI found a hidden network" is easy to claim
-and easy to fake:
+M1–M3 mule behaviour, S1–S3 scam indicators, A1–A2 account takeover, G1–G3
+graph/network — each with the brief's exact point values, each mapping to a
+named action across the five score bands (Allow / Enhanced monitoring / Step-up
+auth / Manual review / Freeze). A score is the sum of the distinct rules that
+fired, and no alert leaves the system without a next step.
 
-1. **The model shares no signal with the rules.** Its features are conduit
-   behaviour — credit-to-debit pairing, the consistency of the forwarded
-   fraction and the holding delay, counterparty shape. No unique-sender counts,
-   no shared-identifier flags, no >80%-in-24h test. If it reused the rules'
-   inputs it could only re-find what the rules already found.
-
-2. **The features are generic, not reverse-engineered.** They are standard
-   money-mule indicators and they score the loud ring, the takeover and ordinary
-   busy businesses too. The stealth ring is separable on *shape*, not on volume
-   — its transaction count sits within a standard deviation of the background,
-   deliberately, so it cannot be found for a trivial reason.
-
-3. **The anomaly score never touches a rule score.** It lives in its own column
-   with its own action lane (`ML_REVIEW → Manual fraud review`). The audit chain
-   survives intact, and `test_ml_findings_never_change_a_rule_score` proves it.
-
-Everything is deterministic: one seed, `random_state` pinned, fixed feature
-order, sorted iteration throughout, and `now` is the replay clock rather than
-the wall clock. Two runs produce byte-identical output, which
-`tests/test_determinism.py` asserts.
-
----
-
-## Layout
-
-```
-backend/app/
-  generator/   seeded Faker world: 4 tables, 3 planted structures
-  engine/      11 rules, scoring, action policy
-  graphlayer/  NetworkX graph, 2-hop traversal, Louvain communities
-  ml/          features, Isolation Forest, explanations, network detection
-  copilot/     deterministic case files, optional cached LLM narrative
-  replay/      the event stream the UI plays back
-  api/         REST + /ws/replay
-frontend/src/
-  layout.ts    seeded force-directed layout
-  components/  feed (left) · graph (centre) · copilot (right)
-```
+> The brief says "implement all ten" and then lists eleven. All eleven are
+> implemented; the count in the prose is the typo, not the list.
 
 ## Data
 
 Generated, not downloaded — no public AML dataset carries the device
-fingerprints, login events, password resets or beneficiary timestamps that S1,
-S2, A1, A2 and G2 need. 255 accounts and ~1,150 transactions over 30 days,
-across the brief's four tables.
+fingerprints, login events, password resets and beneficiary timestamps that S1,
+S2, A1, A2 and G2 need. 255 accounts over a 30-day window, across the brief's
+four tables, calibrated to IBM's HI-Small AML dataset (see
+`backend/app/generator/calibration.py` for the honest note on that calibration).
 
-Background traffic is shaped to IBM's *Transactions for Anti Money Laundering*
-(HI-Small variant; Altman et al., NeurIPS 2023) so the ring does not stand out
-merely because the noise around it is unrealistic. **Honestly:** the constants
-in `app/generator/calibration.py` encode HI-Small's published characteristics —
-lognormal amounts, power-law degree, the payment-format mix, the ~0.1% illicit
-rate — rather than being recomputed from the raw 5M-row file, which is
-Kaggle-auth-gated. `recalibrate_from_hi_small()` recomputes them properly from
-the real CSV, and running it is what would turn the citation from "shaped like"
-into "measured from".
+The live demo draws its beats from the **same deterministic generator** that
+produces the committed dataset, split by transaction tag into a benign baseline
+and the two beats — so the live story and the batch dataset are the same numbers,
+with no second hand-tuned copy to drift.
+
+## Architecture
+
+```
+backend/app/
+  config.py       env-driven config (.env); rule points + bands stay in code
+  generator/      seeded Faker world: 4 tables, planted ring
+  engine/         11 rules, scoring, action policy
+  graphlayer/     NetworkX graph, 2-hop traversal, Louvain communities
+  copilot/        composer.py (template narrative) + llm.py (optional provider)
+  report/         server-side PDF case report (ReportLab)
+  live/           mutable API-driven scoring state + demo scenario
+  ml/             anomaly layer (behind FINGUARD_ML_ENABLED)
+  api/            live.py (DEMO-SPEC API + /ws/live) and routes.py/ws.py (batch/replay)
+frontend/src/     light-theme, three-beat room wired to /ws/live
+demo/             preset trigger scripts
+```
+
+The **live API** (`POST /api/transaction`, `/transaction/batch`,
+`/account/{id}/freeze`, `/report`, `/report.pdf`, `/api/demo/reset`, `/ws/live`)
+is what the stage demo runs on. The earlier **batch/replay** analysis endpoints
+remain alongside it.
+
+## Optional layers (behind flags)
+
+Two capabilities from earlier iterations are kept in the codebase but **off by
+default**, because the DEMO-SPEC stage demo is deliberately deterministic and
+rules-only:
+
+- **LLM narrative** — `FINGUARD_LLM_PROVIDER=gemini|anthropic` layers a written
+  narrative over the template composer. It is handed the finished facts and only
+  rewrites them into prose; it never computes a score or picks an action, is
+  cached to disk, and degrades to the template on any failure. Default `none`.
+- **Anomaly (ML) layer** — `FINGUARD_ML_ENABLED=true` re-enables the Isolation
+  Forest that finds a stealth mule ring the rules miss, in the batch/replay
+  analysis. The live demo forces it off regardless. Its `MISSED_BY_RULES` proof
+  test still runs in the suite.
 
 ## Two places this departs from the brief
 
-- **Section 4 says "implement all ten" and then lists eleven rules** (M1–M3,
-  S1–S3, A1–A2, G1–G3). All eleven are implemented; the count in the prose is
-  the typo, not the list.
-- **Section 6 describes the takeover scenario as "A1 (+30) → Temporary
-  Transaction Hold", but section 4's own table puts 30 points in the 0–30 "Allow
-  transaction" band.** A1 alone cannot produce a hold. The scenario therefore
-  plays out as a takeover realistically would — credential stuffing (A2), then
-  the reset and transfer (A1), then a transfer off-pattern in both device and
-  value (S2) — reaching 75 and a manual review posture.
+- **Ten rules vs eleven** — see above; all eleven are implemented.
+- **The takeover scenario** — the brief describes it as "A1 (+30) → Temporary
+  Transaction Hold", but its own band table puts 30 points in the 0–30 "Allow"
+  band. A1 alone cannot produce a hold, so that scenario plays as a takeover
+  realistically would (A2 → A1 → S2, reaching 75 and manual review).
 
 ## What is real and what is stubbed
 
-The engine is real: the rules, the scoring, the graph traversal, the anomaly
-model and the case files all run on the data. Integrations to core banking are
-mocked — freezing an account updates state in this application and calls nothing
-downstream. The LLM narrative is optional and off by default; without
-`ANTHROPIC_API_KEY` the copilot serves its deterministic case file, which is what
-the demo runs on.
+The engine is real: the rules, scoring, graph traversal, case files and PDF all
+run on the data, and the freeze genuinely blocks further transactions. Integrations
+to core banking are mocked — freezing updates state in this application and calls
+nothing downstream — and the PDF footer says so.
