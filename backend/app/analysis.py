@@ -12,6 +12,7 @@ import datetime as dt
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from .config import ML_ENABLED
 from .dataio import cached_dataset
 from .engine.actions import Action, build_action_log
 from .engine.context import EvaluationContext, build_context
@@ -103,7 +104,9 @@ class Analysis:
         return events
 
 
-def run_analysis(dataset: Dataset, *, graph_enabled: bool = True) -> Analysis:
+def run_analysis(
+    dataset: Dataset, *, graph_enabled: bool = True, ml_enabled: bool | None = None
+) -> Analysis:
     """Analyse a dataset end to end.
 
     ``graph_enabled=False`` drops the network rules and skips the anomaly layer
@@ -111,7 +114,16 @@ def run_analysis(dataset: Dataset, *, graph_enabled: bool = True) -> Analysis:
     seen in the same window. That is a genuine re-run with a smaller rule set,
     not a filter over the full result -- which is the only way the comparison
     means anything.
+
+    ``ml_enabled`` gates the anomaly layer independently of the rules. It
+    defaults to the ``FINGUARD_ML_ENABLED`` config value; the live presenter
+    demo passes ``False`` explicitly, since the DEMO-SPEC stage story uses no
+    ML. When off, the rules, scoring, graph and actions are unchanged -- only
+    the anomaly findings and ML networks are empty.
     """
+    if ml_enabled is None:
+        ml_enabled = ML_ENABLED
+
     ctx = build_context(dataset)
 
     hits: list[RuleHit] = []
@@ -122,12 +134,12 @@ def run_analysis(dataset: Dataset, *, graph_enabled: bool = True) -> Analysis:
     scores = score_accounts(hits)
     actions = build_action_log(scores)
 
-    if not graph_enabled:
+    if not graph_enabled or not ml_enabled:
         empty = run_anomaly_model(build_features(ctx).__class__(account_ids=[], rows=[]))
         return Analysis(
             dataset=dataset,
             ctx=ctx,
-            graph_enabled=False,
+            graph_enabled=graph_enabled,
             hits=hits,
             scores=scores,
             actions=actions,

@@ -1,95 +1,85 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
-import { Controls } from './components/Controls'
-import { CopilotPanel } from './components/CopilotPanel'
-import { FeedPanel } from './components/FeedPanel'
-import { ForceGraph } from './components/ForceGraph'
+import { Canvas } from './components/Canvas'
+import { ControlStrip } from './components/ControlStrip'
+import { Dashboard } from './components/Dashboard'
+import { Feed } from './components/Feed'
 import { Header } from './components/Header'
-import { MLBanner } from './components/MLBanner'
 import { fonts, palette } from './theme'
-import type { Comparison, DatasetSummary, GraphPayload, NetworkCase } from './types'
-import { useReplay } from './useReplay'
+import { useLive } from './useLive'
 
 export default function App() {
-  const { state, start, pause, resume, step, setSpeed } = useReplay()
-
-  const [graph, setGraph] = useState<GraphPayload | null>(null)
-  const [summary, setSummary] = useState<DatasetSummary | null>(null)
-  const [comparison, setComparison] = useState<Comparison | null>(null)
-  const [networkCases, setNetworkCases] = useState<NetworkCase[]>([])
-
-  const [graphEnabled, setGraphEnabled] = useState(true)
-  const [speed, setSpeedValue] = useState(60)
+  const { state, refresh } = useLive()
   const [selected, setSelected] = useState<string | null>(null)
-  const [openNetwork, setOpenNetwork] = useState<string | null>(null)
-  const [lockedAccounts, setLockedAccounts] = useState<Set<string>>(new Set())
-  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [version, setVersion] = useState(0)
 
   useEffect(() => {
-    Promise.all([api.summary(), api.comparison(), api.networks()])
-      .then(([summaryData, comparisonData, networksData]) => {
-        setSummary(summaryData)
-        setComparison(comparisonData)
-        setNetworkCases(networksData.items)
-      })
-      .catch((err) => setError(String(err)))
-  }, [])
+    refresh()
+  }, [refresh])
 
+  // Re-fetch the open case whenever scores or freezes move.
   useEffect(() => {
-    api.graph(graphEnabled).then(setGraph).catch((err) => setError(String(err)))
-  }, [graphEnabled])
+    setVersion((v) => v + 1)
+  }, [state.nodes, state.frozen])
 
-  const handlePlay = useCallback(() => {
-    setLockedAccounts(new Set())
-    setOpenNetwork(null)
-    start(speed, graphEnabled)
-  }, [start, speed, graphEnabled])
-
-  const handleSpeed = useCallback(
-    (next: number) => {
-      setSpeedValue(next)
-      setSpeed(next)
+  const guard = useCallback(
+    async (fn: () => Promise<unknown>) => {
+      setBusy(true)
+      try {
+        await fn()
+      } finally {
+        setBusy(false)
+      }
     },
-    [setSpeed],
+    [],
   )
 
-  const handleToggleGraph = useCallback(
-    (enabled: boolean) => {
-      setGraphEnabled(enabled)
-      setLockedAccounts(new Set())
-      setOpenNetwork(null)
-      setSelected(null)
-      // Restart against the other engine immediately: the comparison only
-      // reads if both sides are watched running, not described.
-      start(speed, enabled)
-    },
-    [start, speed],
-  )
-
-  const handleApprove = useCallback((accountIds: string[]) => {
-    setLockedAccounts((previous) => {
-      const next = new Set(previous)
-      accountIds.forEach((id) => next.add(id))
-      return next
+  const onReset = useCallback(() => {
+    setSelected(null)
+    // Reload the snapshot after resetting so Beat 0 shows the ambient grey-node
+    // field -- "a normal afternoon at the bank" -- rather than a blank canvas.
+    return guard(async () => {
+      await api.reset()
+      await refresh()
     })
-  }, [])
+  }, [guard, refresh])
 
-  const selectAccount = useCallback((accountId: string) => {
-    setOpenNetwork(null)
-    setSelected(accountId)
-  }, [])
+  const onBeat1 = useCallback(() => guard(async () => {
+    await api.fireBeat(1)
+    setSelected('ACC-V001')
+  }), [guard])
 
-  const ringFrozen = lockedAccounts.size > 0
-  const frozen = useMemo(() => {
-    const combined = new Set(state.frozen)
-    lockedAccounts.forEach((id) => combined.add(id))
-    return combined
-  }, [state.frozen, lockedAccounts])
+  const onBeat2 = useCallback(() => guard(() => api.fireBeat(2)), [guard])
 
-  const activeNetworkCase = useMemo(
-    () => networkCases.find((n) => n.network_id === openNetwork) ?? null,
-    [networkCases, openNetwork],
+  const onBlocked = useCallback(() => guard(() => api.blockedAttempt()), [guard])
+
+  const onFreeze = useCallback(
+    (id: string) => {
+      // Freeze the whole detected ring when freezing a member, so the closing
+      // beat contains the network rather than one node.
+      const targets = state.ring && state.ring.accounts.includes(id) ? state.ring.accounts : [id]
+      return guard(async () => {
+        for (const t of targets) await api.freeze(t)
+      })
+    },
+    [guard, state.ring],
   )
+
+  const onReport = useCallback((id: string) => guard(() => api.report(id)), [guard])
+
+  // ` toggles nothing here but keydown 0/1/2/3 fire the beats for a hands-free demo.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return
+      if (e.key === '0') onReset()
+      if (e.key === '1') onBeat1()
+      if (e.key === '2') onBeat2()
+      if (e.key === '3') onBlocked()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onReset, onBeat1, onBeat2, onBlocked])
 
   return (
     <div
@@ -97,96 +87,48 @@ export default function App() {
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        background: palette.ink,
-        color: palette.text,
+        background: palette.bg,
+        color: palette.ink,
         fontFamily: fonts.ui,
         overflow: 'hidden',
       }}
     >
       <Header
-        summary={summary}
-        clock={state.clock}
-        ringFrozen={ringFrozen}
-        frozenCount={frozen.size}
-        graphEnabled={graphEnabled}
-        progress={state.progress}
+        beat={state.beat}
+        connected={state.connected}
+        monitored={state.monitored}
+        transactions={state.transactionCount}
+        frozenCount={state.frozen.size}
       />
-
-      {error && (
-        <div
-          style={{
-            background: palette.alert,
-            color: '#FFFFFF',
-            padding: '8px 16px',
-            fontSize: 12,
-          }}
-        >
-          {error} — is the backend running on port 8000?
-        </div>
-      )}
-
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <FeedPanel feed={state.feed} firings={state.firings} onSelect={selectAccount} />
-
-        <main style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-          {graph ? (
-            <ForceGraph
-              graph={graph}
-              liveScores={state.scores}
-              liveBands={state.bands}
-              mlFlagged={state.mlFlagged}
-              mlMissed={state.mlMissed}
-              pulses={state.pulses}
-              selected={selected}
-              onSelect={selectAccount}
-              frozen={frozen}
-            />
-          ) : (
-            <div
-              style={{
-                display: 'grid',
-                placeItems: 'center',
-                height: '100%',
-                color: palette.muted,
-                fontSize: 13,
-              }}
-            >
-              Loading network…
-            </div>
-          )}
-          <MLBanner networks={state.networks} onOpen={setOpenNetwork} />
+        <Feed feed={state.feed} onSelect={setSelected} />
+        <main style={{ flex: 1, position: 'relative', minWidth: 0, background: palette.panel }}>
+          <Canvas
+            nodes={state.nodes}
+            edges={state.edges}
+            frozen={state.frozen}
+            ring={state.ring}
+            pulses={state.pulses}
+            selected={selected}
+            onSelect={setSelected}
+          />
+          <ControlStrip
+            onReset={onReset}
+            onBeat1={onBeat1}
+            onBeat2={onBeat2}
+            onBlocked={onBlocked}
+            busy={busy}
+            ringDetected={!!state.ring}
+          />
         </main>
-
-        <CopilotPanel
+        <Dashboard
           accountId={selected}
-          networkCase={activeNetworkCase}
-          onApprove={handleApprove}
-          approved={
-            activeNetworkCase
-              ? activeNetworkCase.members.every((m) => lockedAccounts.has(m.account_id))
-              : selected
-                ? lockedAccounts.has(selected)
-                : false
-          }
-          onSelect={selectAccount}
-          onClearNetwork={() => setOpenNetwork(null)}
+          frozen={state.frozen}
+          onFreeze={onFreeze}
+          onReport={onReport}
+          version={version}
         />
       </div>
-
-      <Controls
-        running={state.running}
-        paused={state.paused}
-        complete={state.complete}
-        speed={speed}
-        graphEnabled={graphEnabled}
-        comparison={comparison}
-        onPlay={handlePlay}
-        onPause={pause}
-        onResume={resume}
-        onStep={step}
-        onSpeed={handleSpeed}
-        onToggleGraph={handleToggleGraph}
-      />
     </div>
   )
 }
